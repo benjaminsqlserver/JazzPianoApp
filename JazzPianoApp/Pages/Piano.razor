@@ -1,0 +1,317 @@
+﻿@page "/"
+@using JazzPianoApp.Models
+@using JazzPianoApp.Services
+@inject IJSRuntime JSRuntime
+@inject PianoService PianoService
+@implements IDisposable
+
+<div class="piano-container">
+    <div class="container-fluid">
+        <div class="text-center mb-4">
+            <h1 class="display-4 text-white fw-bold">Jazz Piano Chord Progression Trainer</h1>
+        </div>
+
+        <!-- Controls Panel -->
+        <RadzenCard class="chord-progress-card mb-4">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label text-white fw-bold">Key</label>
+                    <RadzenDropDown @bind-Value="@selectedKey"
+                                    Data="@availableKeys"
+                                    Style="width: 100%; background: rgba(255,255,255,0.2); color: white;"
+                                    Change="@OnKeyChanged" />
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label text-white fw-bold">Progression</label>
+                    <RadzenDropDown @bind-Value="@selectedProgressionKey"
+                                    Data="@progressionOptions"
+                                    TextProperty="Text"
+                                    ValueProperty="Value"
+                                    Style="width: 100%; background: rgba(255,255,255,0.2); color: white;"
+                                    Change="@OnProgressionChanged" />
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label text-white fw-bold">Tempo: @tempo BPM</label>
+                    <RadzenSlider @bind-Value="@tempo"
+                                  Min="60"
+                                  Max="200"
+                                  Step="10"
+                                  Style="width: 100%;" />
+                </div>
+
+                <div class="col-md-3">
+                    <div class="d-flex gap-2 align-items-end h-100 pb-2">
+                        <RadzenButton Click="@TogglePlayback"
+                                      ButtonStyle="@(isPlaying ? ButtonStyle.Warning : ButtonStyle.Success)"
+                                      Icon="@(isPlaying ? "pause" : "play_arrow")"
+                                      Text="@(isPlaying ? "Pause" : "Play")"
+                                      Style="flex: 1;" />
+
+                        <RadzenButton Click="@Reset"
+                                      ButtonStyle="ButtonStyle.Secondary"
+                                      Icon="refresh"
+                                      Style="width: 50px;" />
+
+                        <RadzenButton Click="@PlayCurrentChord"
+                                      ButtonStyle="ButtonStyle.Info"
+                                      Icon="volume_up"
+                                      Style="width: 50px;" />
+                    </div>
+                </div>
+            </div>
+        </RadzenCard>
+
+        <!-- Current Chord Display -->
+        <RadzenCard class="chord-progress-card mb-4">
+            <div class="text-center">
+                <h2 class="text-white mb-2">
+                    Current Chord: <span style="color: #ffd700;">@currentChord?.Name</span>
+                </h2>
+                <div class="h5 text-white-50">
+                    @currentProgression?.Name - Step @(currentChordIndex + 1) of @(currentProgression?.ChordTypes.Count ?? 0)
+                </div>
+                <div class="text-white-50">
+                    Notes: @(currentChord != null ? string.Join(" - ", currentChord.Notes) : "")
+                </div>
+            </div>
+        </RadzenCard>
+
+        <!-- Piano Keyboard -->
+        <RadzenCard class="chord-progress-card mb-4">
+            <div class="overflow-auto">
+                <div class="d-flex position-relative justify-content-center" style="min-width: 1500px; height: 170px; margin: 20px;">
+                    @{
+                        var whiteKeyIndex = 0;
+                    }
+                    @foreach (var key in pianoKeys)
+                    {
+                        if (!key.IsBlack)
+                        {
+                            <div class="piano-key white @(key.IsHighlighted ? "highlighted" : "")"
+                                 style="left: @(whiteKeyIndex * 41)px; position: absolute;"
+                                 @onclick="@(() => PlayNote(key))">
+                                <div class="key-label text-dark">@key.Note</div>
+                            </div>
+                            whiteKeyIndex++;
+                        }
+                    }
+
+                    @{
+                        var whiteKeyCount = 0;
+                    }
+                    @foreach (var key in pianoKeys)
+                    {
+                        if (key.IsBlack)
+                        {
+                            var previousWhiteKeys = pianoKeys.Take(pianoKeys.IndexOf(key)).Count(k => !k.IsBlack);
+                            <div class="piano-key black @(key.IsHighlighted ? "highlighted" : "")"
+                                 style="left: @(previousWhiteKeys * 41 - 12)px;"
+                                 @onclick="@(() => PlayNote(key))">
+                                <div class="key-label text-white">@key.Note</div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </RadzenCard>
+
+        <!-- Chord Progression Display -->
+        <RadzenCard class="chord-progress-card mb-4">
+            <h3 class="text-white mb-4 text-center fw-bold">Chord Progression</h3>
+            <div class="row g-3 justify-content-center">
+                @if (currentProgression != null)
+                {
+                    @for (int i = 0; i < currentProgression.RomanNumerals.Count; i++)
+                    {
+                        var index = i;
+                        var isActive = index == currentChordIndex;
+                        var chordInfo = PianoService.GetChordInfo(selectedKey, currentProgression.RomanNumerals[index], currentProgression.ChordTypes[index]);
+
+                        <div class="col-auto">
+                            <div class="chord-step @(isActive ? "active" : "inactive")"
+                                 @onclick="@(() => JumpToChord(index))">
+                                <div class="h4 mb-1">@currentProgression.RomanNumerals[index]</div>
+                                <div class="small">@chordInfo.Name</div>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </RadzenCard>
+
+        <!-- Instructions -->
+        <RadzenCard class="chord-progress-card">
+            <h3 class="text-white mb-3 fw-bold">How to Use</h3>
+            <div class="text-white-50">
+                <ul class="list-unstyled">
+                    <li class="mb-2">• Select a key and chord progression from the dropdowns above</li>
+                    <li class="mb-2">• Click Play to hear the progression automatically, or use the sound button to play the current chord</li>
+                    <li class="mb-2">• Watch as the piano keys light up to show which notes make up each chord</li>
+                    <li class="mb-2">• Yellow keys show the current chord notes, and the progression advances automatically</li>
+                    <li class="mb-2">• Adjust the tempo slider to practice at your preferred speed</li>
+                    <li class="mb-2">• Click individual piano keys to hear their sounds and practice the chords manually</li>
+                    <li>• Click on chord steps in the progression to jump to that chord</li>
+                </ul>
+            </div>
+        </RadzenCard>
+    </div>
+</div>
+
+@code {
+    //private readonly PianoService pianoService = new();
+    private List<PianoKey> pianoKeys = new();
+    private Dictionary<string, JazzProgression> progressions = new();
+    private List<string> availableKeys = new() { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+
+    private string selectedKey = "C";
+    private string selectedProgressionKey = "ii-V-I";
+    private int tempo = 120;
+    private bool isPlaying = false;
+    private int currentChordIndex = 0;
+    private Timer? playbackTimer;
+
+    // Added field
+    private List<ProgressionOption> progressionOptions = new();
+
+    private JazzProgression? currentProgression => progressions.ContainsKey(selectedProgressionKey) ? progressions[selectedProgressionKey] : null;
+    private ChordInfo? currentChord => currentProgression != null ?
+        PianoService.GetChordInfo(selectedKey, currentProgression.RomanNumerals[currentChordIndex], currentProgression.ChordTypes[currentChordIndex]) : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        
+        
+        progressions = PianoService.GetJazzProgressions();
+        progressionOptions = progressions.Select(p => new ProgressionOption
+        {
+            Value = p.Key,
+            Text = p.Value.Name
+        }).ToList();
+        pianoKeys = PianoService.GenerateKeys();
+        await JSRuntime.InvokeVoidAsync("initAudio");
+        UpdateHighlightedKeys();
+    }
+
+    private void OnKeyChanged()
+    {
+        UpdateHighlightedKeys();
+        StateHasChanged();
+    }
+
+    private void OnProgressionChanged()
+    {
+        currentChordIndex = 0;
+        UpdateHighlightedKeys();
+        StateHasChanged();
+    }
+
+    private void UpdateHighlightedKeys()
+    {
+        // Reset all highlights
+        foreach (var key in pianoKeys)
+        {
+            key.IsHighlighted = false;
+        }
+
+        if (currentChord != null)
+        {
+            foreach (var note in currentChord.Notes)
+            {
+                var keysToHighlight = pianoKeys.Where(k => k.Note.StartsWith(note)).ToList();
+                foreach (var key in keysToHighlight)
+                {
+                    key.IsHighlighted = true;
+                }
+            }
+        }
+    }
+
+    private async Task TogglePlayback()
+    {
+        isPlaying = !isPlaying;
+
+        if (isPlaying)
+        {
+            await PlayCurrentChord();
+            StartPlaybackTimer();
+        }
+        else
+        {
+            StopPlaybackTimer();
+        }
+
+        StateHasChanged();
+    }
+
+    private void StartPlaybackTimer()
+    {
+        var interval = (60.0 / tempo) * 1000; // Convert BPM to milliseconds
+        playbackTimer = new Timer(async _ => await AdvanceChord(), null, (int)interval, (int)interval);
+    }
+
+    private void StopPlaybackTimer()
+    {
+        playbackTimer?.Dispose();
+        playbackTimer = null;
+    }
+
+    private async Task AdvanceChord()
+    {
+        if (currentProgression != null)
+        {
+            currentChordIndex = (currentChordIndex + 1) % currentProgression.ChordTypes.Count;
+            UpdateHighlightedKeys();
+            await InvokeAsync(StateHasChanged);
+            await PlayCurrentChord();
+        }
+    }
+
+    private async Task Reset()
+    {
+        isPlaying = false;
+        currentChordIndex = 0;
+        StopPlaybackTimer();
+        UpdateHighlightedKeys();
+        StateHasChanged();
+    }
+
+    private async Task JumpToChord(int index)
+    {
+        currentChordIndex = index;
+        UpdateHighlightedKeys();
+        await PlayCurrentChord();
+        StateHasChanged();
+    }
+
+    private async Task PlayCurrentChord()
+    {
+        if (currentChord != null)
+        {
+            var frequencies = new List<double>();
+            var octave = 4;
+
+            foreach (var note in currentChord.Notes)
+            {
+                var key = pianoKeys.FirstOrDefault(k => k.Note.StartsWith(note) && k.Note.Contains(octave.ToString()));
+                if (key != null)
+                {
+                    frequencies.Add(key.Frequency);
+                }
+            }
+
+            await JSRuntime.InvokeVoidAsync("playChord", frequencies.ToArray());
+        }
+    }
+
+    private async Task PlayNote(PianoKey key)
+    {
+        await JSRuntime.InvokeVoidAsync("playNote", key.Frequency);
+    }
+
+    public void Dispose()
+    {
+        playbackTimer?.Dispose();
+    }
+}

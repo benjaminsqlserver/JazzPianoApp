@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JazzPianoApp</title>
+    <base href="/" />
+    <link rel="stylesheet" href="css/app.css" />
+    <!-- If you add any scoped CSS files, uncomment the following to load them
+    <link href="JazzPianoApp.styles.css" rel="stylesheet" /> -->
+    <!-- Radzen CSS -->
+    <link rel="stylesheet" href="_content/Radzen.Blazor/css/material-base.css">
+    <link href="manifest.webmanifest" rel="manifest" />
+    <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png" />
+
+    <!-- Custom CSS for Piano -->
+    <style>
+        .piano-container {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .piano-key {
+            cursor: pointer;
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+
+            .piano-key.white {
+                background: white;
+                border: 1px solid #ccc;
+                border-radius: 0 0 8px 8px;
+                height: 150px;
+                width: 40px;
+                position: relative;
+                display: inline-block;
+            }
+
+            .piano-key.black {
+                background: #333;
+                border: 1px solid #000;
+                border-radius: 0 0 6px 6px;
+                height: 100px;
+                width: 25px;
+                position: absolute;
+                z-index: 2;
+                margin-left: -12.5px;
+            }
+
+            .piano-key.white:hover {
+                background: #f0f0f0;
+            }
+
+            .piano-key.black:hover {
+                background: #555;
+            }
+
+            .piano-key.highlighted {
+                background: #ffd700 !important;
+                box-shadow: 0 0 15px rgba(255, 215, 0, 0.7);
+                transform: translateY(-2px);
+            }
+
+            .piano-key.black.highlighted {
+                background: #ff4444 !important;
+                box-shadow: 0 0 15px rgba(255, 68, 68, 0.7);
+            }
+
+        .key-label {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10px;
+            font-weight: bold;
+        }
+
+        .chord-progress-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .chord-step {
+            transition: all 0.3s ease;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            border: 2px solid transparent;
+        }
+
+            .chord-step.active {
+                background: #ffd700;
+                color: #333;
+                border-color: #ffed4e;
+                transform: scale(1.05);
+                box-shadow: 0 5px 15px rgba(255, 215, 0, 0.4);
+            }
+
+            .chord-step.inactive {
+                background: rgba(255, 255, 255, 0.1);
+                color: white;
+                border-color: rgba(255, 255, 255, 0.3);
+            }
+    </style>
+</head>
+
+<body>
+    <div id="app">Loading...</div>
+
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="" class="reload">Reload</a>
+        <a class="dismiss">🗙</a>
+    </div>
+
+    <!-- Radzen JS -->
+    <script src="_content/Radzen.Blazor/Radzen.Blazor.js"></script>
+    <script src="_framework/blazor.webassembly.js"></script>
+    <script>navigator.serviceWorker.register('service-worker.js');</script>
+
+    <!-- Audio Context for Piano Sounds -->
+    <script>
+        window.audioContext = null;
+
+        window.initAudio = () => {
+            if (!window.audioContext) {
+                window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            return window.audioContext;
+        };
+
+        window.playNote = (frequency, duration = 1.0) => {
+            if (!window.audioContext) {
+                window.initAudio();
+            }
+
+            const oscillator = window.audioContext.createOscillator();
+            const gainNode = window.audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(window.audioContext.destination);
+
+            oscillator.frequency.value = frequency;
+            oscillator.type = 'sine';
+
+            gainNode.gain.value = 0.3;
+            gainNode.gain.exponentialRampToValueAtTime(0.01, window.audioContext.currentTime + duration);
+
+            oscillator.start(window.audioContext.currentTime);
+            oscillator.stop(window.audioContext.currentTime + duration);
+        };
+
+        window.playChord = (frequencies) => {
+            frequencies.forEach((freq, index) => {
+                setTimeout(() => window.playNote(freq, 1.0), index * 100);
+            });
+        };
+    </script>
+</body>
+
+</html>
